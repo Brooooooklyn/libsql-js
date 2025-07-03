@@ -30,20 +30,21 @@
     }
   },
   "napi": {
-    "name": "libsql",
-    "triples": {
-      "additional": [
-        "aarch64-apple-darwin",
-        "aarch64-pc-windows-msvc",
-        "aarch64-unknown-linux-gnu",
-        "aarch64-unknown-linux-musl",
-        "x86_64-unknown-linux-musl"
-      ]
-    }
+    "binaryName": "libsql",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "x86_64-pc-windows-msvc",
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin",
+      "aarch64-pc-windows-msvc",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-linux-musl",
+      "x86_64-unknown-linux-musl"
+    ]
   },
   "license": "MIT",
   "devDependencies": {
-    "@napi-rs/cli": "^2.18.4",
+    "@napi-rs/cli": "^3.0.0-alpha.91",
     "ava": "^6.0.1"
   },
   "ava": {
@@ -61,5 +62,5 @@
     "universal": "napi universal",
     "version": "napi version"
   },
-  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+  "packageManager": "yarn@4.9.2"
 }

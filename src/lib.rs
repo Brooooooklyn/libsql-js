@@ -23,8 +23,11 @@
 mod auth;
 
 use napi::{
-    bindgen_prelude::{Array, FromNapiValue, ToNapiValue},
-    Env, JsUnknown, Result, ValueType,
+    bindgen_prelude::{
+        Array, BigInt, BufferSlice, Env, FromNapiValue, JsObjectValue, JsValue, Null, Object,
+        PromiseRaw, Result, ToNapiValue, TypedArray, Unknown, ValueType,
+    },
+    JsString,
 };
 use napi_derive::napi;
 use once_cell::sync::OnceCell;
@@ -210,7 +213,7 @@ pub struct Options {
 }
 
 /// Access mode.
-/// 
+///
 /// The `better-sqlite3` API allows the caller to configure the format of
 /// query results. This struct encapsulates the different access mode configs.
 struct AccessMode {
@@ -399,7 +402,7 @@ impl Database {
     /// });
     /// ```
     #[napi]
-    pub fn authorizer(&self, env: Env, rules_obj: napi::JsObject) -> Result<()> {
+    pub fn authorizer(&self, env: Env, rules_obj: Object) -> Result<()> {
         let conn = match &self.conn {
             Some(c) => c.clone(),
             None => {
@@ -646,7 +649,7 @@ impl Statement {
     ///
     /// * `params` - The parameters to bind to the statement.
     #[napi]
-    pub fn run(&self, params: Option<napi::JsUnknown>) -> Result<RunResult> {
+    pub fn run(&self, params: Option<Unknown>) -> Result<RunResult> {
         let rt = runtime()?;
         rt.block_on(async move {
             let conn = self.conn.lock().await;
@@ -679,7 +682,7 @@ impl Statement {
     /// * `env` - The environment.
     /// * `params` - The parameters to bind to the statement.
     #[napi]
-    pub fn get(&self, env: Env, params: Option<napi::JsUnknown>) -> Result<napi::JsUnknown> {
+    pub fn get<'env>(&self, env: &'env Env, params: Option<Unknown>) -> Result<Unknown<'env>> {
         let rt = runtime()?;
 
         let safe_ints = self.mode.safe_ints.load(Ordering::SeqCst);
@@ -712,37 +715,33 @@ impl Statement {
         })
     }
 
-    fn get_internal(
-        env: &Env,
+    fn get_internal<'env>(
+        env: &'env Env,
         row: &Option<libsql::Row>,
         column_names: &[std::ffi::CString],
         safe_ints: bool,
         raw: bool,
         pluck: bool,
         duration: Option<f64>,
-    ) -> Result<napi::JsUnknown> {
+    ) -> Result<Unknown<'env>> {
         match row {
             Some(row) => {
                 if raw {
                     let js_array = map_row_raw(&env, &column_names, &row, safe_ints, pluck)?;
-                    Ok(js_array.into_unknown())
+                    Ok(js_array)
                 } else {
                     let mut js_object =
                         map_row_object(&env, &column_names, &row, safe_ints, pluck)?
                             .coerce_to_object()?;
                     if let Some(duration) = duration {
-                        let mut metadata = env.create_object()?;
-                        let js_duration = env.create_double(duration)?;
-                        metadata.set_named_property("duration", js_duration)?;
+                        let mut metadata = Object::new(env)?;
+                        metadata.set_named_property("duration", duration)?;
                         js_object.set_named_property("_metadata", metadata)?;
                     }
-                    Ok(js_object.into_unknown())
+                    Ok(js_object.to_unknown())
                 }
             }
-            None => {
-                let undefined = env.get_undefined()?;
-                Ok(undefined.into_unknown())
-            }
+            None => ToNapiValue::into_unknown((), env),
         }
     }
 
@@ -753,7 +752,11 @@ impl Statement {
     /// * `env` - The environment.
     /// * `params` - The parameters to bind to the statement.
     #[napi]
-    pub fn iterate(&self, env: Env, params: Option<napi::JsUnknown>) -> Result<napi::JsObject> {
+    pub fn iterate<'env, 'promise>(
+        &self,
+        env: &'env Env,
+        params: Option<Unknown>,
+    ) -> Result<PromiseRaw<'env, RowsIterator>> {
         let rt = runtime()?;
         let safe_ints = self.mode.safe_ints.load(Ordering::SeqCst);
         let raw = self.mode.raw.load(Ordering::SeqCst);
@@ -773,7 +776,7 @@ impl Statement {
             Ok::<_, napi::Error>(rows)
         };
         let column_names = self.column_names.clone();
-        env.execute_tokio_future(future, move |&mut _env, result| {
+        env.spawn_future_with_callback(future, move |_, result| {
             Ok(RowsIterator::new(
                 Arc::new(tokio::sync::Mutex::new(result)),
                 column_names,
@@ -817,38 +820,38 @@ impl Statement {
     }
 
     #[napi]
-    pub fn columns(&self, env: Env) -> Result<Array> {
+    pub fn columns<'env>(&self, env: &'env Env) -> Result<Array<'env>> {
         let rt = runtime()?;
         rt.block_on(async move {
             let stmt = self.stmt.lock().await;
             let columns = stmt.columns();
             let mut js_array = env.create_array(columns.len() as u32)?;
             for (i, col) in columns.iter().enumerate() {
-                let mut js_obj = env.create_object()?;
-                js_obj.set_named_property("name", env.create_string(col.name())?)?;
+                let mut js_obj = Object::new(&env)?;
+                js_obj.set_named_property("name", col.name())?;
                 // origin_name -> column
                 if let Some(origin_name) = col.origin_name() {
-                    js_obj.set_named_property("column", env.create_string(origin_name)?)?;
+                    js_obj.set_named_property("column", origin_name)?;
                 } else {
-                    js_obj.set_named_property("column", env.get_null()?)?;
+                    js_obj.set_named_property("column", Null)?;
                 }
                 // table_name -> table
                 if let Some(table_name) = col.table_name() {
-                    js_obj.set_named_property("table", env.create_string(table_name)?)?;
+                    js_obj.set_named_property("table", table_name)?;
                 } else {
-                    js_obj.set_named_property("table", env.get_null()?)?;
+                    js_obj.set_named_property("table", Null)?;
                 }
                 // database_name -> database
                 if let Some(database_name) = col.database_name() {
-                    js_obj.set_named_property("database", env.create_string(database_name)?)?;
+                    js_obj.set_named_property("database", database_name)?;
                 } else {
-                    js_obj.set_named_property("database", env.get_null()?)?;
+                    js_obj.set_named_property("database", Null)?;
                 }
                 // decl_type -> type
                 if let Some(decl_type) = col.decl_type() {
-                    js_obj.set_named_property("type", env.create_string(decl_type)?)?;
+                    js_obj.set_named_property("type", decl_type)?;
                 } else {
-                    js_obj.set_named_property("type", env.get_null()?)?;
+                    js_obj.set_named_property("type", Null)?;
                 }
                 js_array.set(i as u32, js_obj)?;
             }
@@ -876,9 +879,12 @@ impl Statement {
     }
 }
 
-
 #[napi]
-pub fn statement_iterate_sync(stmt: &Statement, _env: Env, params: Option<napi::JsUnknown>) -> Result<RowsIterator> {
+pub fn statement_iterate_sync(
+    stmt: &Statement,
+    _env: Env,
+    params: Option<Unknown>,
+) -> Result<RowsIterator> {
     let rt = runtime()?;
     let safe_ints = stmt.mode.safe_ints.load(Ordering::SeqCst);
     let raw = stmt.mode.raw.load(Ordering::SeqCst);
@@ -891,9 +897,7 @@ pub fn statement_iterate_sync(stmt: &Statement, _env: Env, params: Option<napi::
         let rows = stmt.query(params).await.map_err(Error::from)?;
         let mut column_names = Vec::new();
         for i in 0..rows.column_count() {
-            column_names.push(
-                std::ffi::CString::new(rows.column_name(i).unwrap().to_string()).unwrap(),
-            );
+            column_names.push(std::ffi::CString::new(rows.column_name(i).unwrap()).unwrap());
         }
         Ok::<_, napi::Error>((rows, column_names))
     })?;
@@ -914,15 +918,12 @@ pub struct RunResult {
     pub lastInsertRowid: i64,
 }
 
-fn map_params(
-    stmt: &libsql::Statement,
-    params: Option<napi::JsUnknown>,
-) -> Result<libsql::params::Params> {
+fn map_params(stmt: &libsql::Statement, params: Option<Unknown>) -> Result<libsql::params::Params> {
     if let Some(params) = params {
         match params.get_type()? {
             ValueType::Object => {
-                let object = params.coerce_to_object()?;
-                if object.is_array()? {
+                let object = unsafe { params.cast::<Object>()? };
+                if params.is_array()? {
                     map_params_array(object)
                 } else {
                     map_params_object(stmt, object)
@@ -935,32 +936,29 @@ fn map_params(
     }
 }
 
-fn map_params_single(param: napi::JsUnknown) -> Result<libsql::params::Params> {
+fn map_params_single(param: Unknown) -> Result<libsql::params::Params> {
     Ok(libsql::params::Params::Positional(vec![map_value(param)?]))
 }
 
-fn map_params_array(object: napi::JsObject) -> Result<libsql::params::Params> {
+fn map_params_array(object: Object) -> Result<libsql::params::Params> {
     let mut params = vec![];
     let length = object.get_array_length()?;
     for i in 0..length {
-        let element = object.get_element::<napi::JsUnknown>(i)?;
+        let element = object.get_element::<Unknown>(i)?;
         let value = map_value(element)?;
         params.push(value);
     }
     Ok(libsql::params::Params::Positional(params))
 }
 
-fn map_params_object(
-    stmt: &libsql::Statement,
-    object: napi::JsObject,
-) -> Result<libsql::params::Params> {
+fn map_params_object(stmt: &libsql::Statement, object: Object) -> Result<libsql::params::Params> {
     let mut params = vec![];
     for idx in 0..stmt.parameter_count() {
         let name = stmt.parameter_name((idx + 1) as i32).unwrap();
         let name = name.to_string();
         // Remove the leading ':' or '@' or '$' from parameter name
         let key = &name[1..];
-        if let Ok(value) = object.get_named_property::<napi::JsUnknown>(key) {
+        if let Ok(value) = object.get_named_property::<Unknown>(key) {
             let value = map_value(value)?;
             params.push((name, value));
         }
@@ -969,27 +967,25 @@ fn map_params_object(
 }
 
 /// Maps a JavaScript value to libSQL value types.
-fn map_value(value: JsUnknown) -> Result<libsql::Value> {
+fn map_value(value: Unknown) -> Result<libsql::Value> {
     let value_type = value.get_type()?;
 
     match value_type {
         ValueType::Null | ValueType::Undefined => Ok(libsql::Value::Null),
 
         ValueType::Boolean => {
-            let js_bool = value.coerce_to_bool()?;
-            let b = js_bool.get_value()?;
+            let b = unsafe { value.cast::<bool>()? };
             Ok(libsql::Value::Integer(if b { 1 } else { 0 }))
         }
 
         ValueType::Number => {
-            let js_num = value.coerce_to_number()?;
-            let n = js_num.get_double()?;
+            let n = unsafe { value.cast::<f64>()? };
             Ok(libsql::Value::Real(n))
         }
 
         ValueType::BigInt => {
-            let js_bigint = napi::JsBigInt::from_unknown(value)?;
-            let (v, lossless) = js_bigint.get_i64()?;
+            let js_bigint = BigInt::from_unknown(value)?;
+            let (v, lossless) = js_bigint.get_i64();
             if !lossless {
                 return Err(napi::Error::from_reason(
                     "BigInt value is out of range for SQLite INTEGER (i64)",
@@ -999,35 +995,24 @@ fn map_value(value: JsUnknown) -> Result<libsql::Value> {
         }
 
         ValueType::String => {
-            let js_str = value.coerce_to_string()?;
+            let js_str = unsafe { value.cast::<JsString>()? };
             let utf8 = js_str.into_utf8()?;
             // into_utf8 returns a Utf8 object that derefs to str
             Ok(libsql::Value::Text(utf8.as_str()?.to_owned()))
         }
 
         ValueType::Object => {
-            let obj = value.coerce_to_object()?;
-
             // Check if it's a buffer
-            if obj.is_buffer()? {
-                let buf = napi::JsBuffer::try_from(obj.into_unknown())?;
-                let data = buf.into_value()?.to_vec();
+            if value.is_buffer()? {
+                let buf = BufferSlice::from_unknown(value)?;
+                let data = buf.to_vec();
                 return Ok(libsql::Value::Blob(data));
             }
 
-            if obj.is_typedarray()? {
-                let js_typed = napi::JsTypedArray::try_from(obj.into_unknown())?;
-                let typed_array_value = js_typed.into_value()?;
+            if value.is_typedarray()? {
+                let js_typed = TypedArray::from_unknown(value)?;
 
-                let buffer_data = typed_array_value.arraybuffer.into_value()?;
-                let start = typed_array_value.byte_offset;
-                let end = start + typed_array_value.length;
-
-                if end > buffer_data.len() {
-                    return Err(napi::Error::from_reason("TypedArray length out of bounds"));
-                }
-
-                let slice = &buffer_data[start..end];
+                let slice = js_typed.arraybuffer.as_ref();
                 return Ok(libsql::Value::Blob(slice.to_vec()));
             }
             Err(napi::Error::from_reason(
@@ -1102,18 +1087,18 @@ pub struct Record {
 #[napi]
 impl Record {
     #[napi(getter)]
-    pub fn value(&self, env: Env) -> napi::Result<napi::JsUnknown> {
+    pub fn value<'env>(&self, env: &'env Env) -> napi::Result<Unknown<'env>> {
         if let Some(row) = &self.row {
-            Ok(map_row(
+            map_row(
                 &env,
                 &self.column_names,
                 &row,
                 self.safe_ints,
                 self.raw,
                 self.pluck,
-            )?)
+            )
         } else {
-            Ok(env.get_null()?.into_unknown())
+            Null::into_unknown(Null, env)
         }
     }
 
@@ -1130,49 +1115,48 @@ fn runtime() -> Result<&'static Runtime> {
     Ok(rt)
 }
 
-fn map_row(
-    env: &Env,
+fn map_row<'env>(
+    env: &'env Env,
     column_names: &[std::ffi::CString],
     row: &libsql::Row,
     safe_ints: bool,
     raw: bool,
     pluck: bool,
-) -> Result<napi::JsUnknown> {
-    let result = if raw {
-        map_row_raw(env, column_names, row, safe_ints, pluck)?
+) -> Result<Unknown<'env>> {
+    if raw {
+        map_row_raw(env, column_names, row, safe_ints, pluck)
     } else {
-        map_row_object(env, column_names, row, safe_ints, pluck)?.into_unknown()
-    };
-    Ok(result)
-}
-
-fn convert_value_to_js(
-    env: &Env,
-    value: &libsql::Value,
-    safe_ints: bool,
-) -> Result<napi::JsUnknown> {
-    match value {
-        libsql::Value::Null => Ok(env.get_null()?.into_unknown()),
-        libsql::Value::Integer(v) => {
-            if safe_ints {
-                Ok(env.create_bigint_from_i64(*v)?.into_unknown()?)
-            } else {
-                Ok(env.create_double(*v as f64)?.into_unknown())
-            }
-        }
-        libsql::Value::Real(v) => Ok(env.create_double(*v)?.into_unknown()),
-        libsql::Value::Text(v) => Ok(env.create_string(v)?.into_unknown()),
-        libsql::Value::Blob(v) => Ok(env.create_buffer_with_data(v.clone())?.into_unknown()),
+        map_row_object(env, column_names, row, safe_ints, pluck)
     }
 }
 
-fn map_row_object(
-    env: &Env,
+fn convert_value_to_js<'env>(
+    env: &'env Env,
+    value: libsql::Value,
+    safe_ints: bool,
+) -> Result<Unknown<'env>> {
+    match value {
+        libsql::Value::Null => Null::into_unknown(Null, env),
+        libsql::Value::Integer(v) => {
+            if safe_ints {
+                BigInt::from(v).into_unknown(env)
+            } else {
+                ToNapiValue::into_unknown(v as f64, env)
+            }
+        }
+        libsql::Value::Real(v) => ToNapiValue::into_unknown(v, env),
+        libsql::Value::Text(v) => ToNapiValue::into_unknown(v, env),
+        libsql::Value::Blob(v) => Ok(BufferSlice::from_data(env, v)?.to_unknown()),
+    }
+}
+
+fn map_row_object<'env>(
+    env: &'env Env,
     column_names: &[std::ffi::CString],
     row: &libsql::Row,
     safe_ints: bool,
     pluck: bool,
-) -> Result<napi::JsUnknown> {
+) -> Result<napi::Unknown<'env>> {
     let column_count = column_names.len();
 
     let result = if pluck {
@@ -1181,13 +1165,12 @@ fn map_row_object(
                 Ok(v) => v,
                 Err(e) => return Err(napi::Error::from_reason(e.to_string())),
             };
-            convert_value_to_js(env, &value, safe_ints)?
+            convert_value_to_js(env, value, safe_ints)?
         } else {
-            env.get_null()?.into_unknown()
+            Null::into_unknown(Null, env)?
         }
     } else {
-        let result = env.create_object()?;
-        let result = unsafe { napi::JsObject::to_napi_value(env.raw(), result)? };
+        let mut result = Object::new(env)?;
         // If not plucking, get all columns
         for idx in 0..column_count {
             let value = match row.get_value(idx as i32) {
@@ -1196,33 +1179,25 @@ fn map_row_object(
             };
 
             let column_name = &column_names[idx];
-            let js_value = convert_value_to_js(env, &value, safe_ints)?;
-            unsafe {
-                napi::sys::napi_set_named_property(
-                    env.raw(),
-                    result,
-                    column_name.as_ptr(),
-                    napi::JsUnknown::to_napi_value(env.raw(), js_value)?,
-                );
-            }
+            let js_value = convert_value_to_js(env, value, safe_ints)?;
+            result.set_named_property(column_name.to_str().unwrap(), js_value)?;
         }
-        let result: napi::JsObject = unsafe { napi::JsObject::from_napi_value(env.raw(), result)? };
-        result.into_unknown()
+        result.to_unknown()
     };
     Ok(result)
 }
 
-fn map_row_raw(
-    env: &Env,
+fn map_row_raw<'a>(
+    env: &'a Env,
     column_names: &[std::ffi::CString],
     row: &libsql::Row,
     safe_ints: bool,
     pluck: bool,
-) -> Result<napi::JsUnknown> {
+) -> Result<napi::Unknown<'a>> {
     if pluck {
         let value = match row.get_value(0) {
-            Ok(v) => convert_value_to_js(env, &v, safe_ints)?,
-            Err(_) => env.get_null()?.into_unknown(),
+            Ok(v) => convert_value_to_js(env, v, safe_ints)?,
+            Err(_) => Null::into_unknown(Null, env)?,
         };
         return Ok(value);
     }
@@ -1233,10 +1208,10 @@ fn map_row_raw(
             Ok(v) => v,
             Err(e) => return Err(napi::Error::from_reason(e.to_string())),
         };
-        let js_value = convert_value_to_js(env, &value, safe_ints)?;
+        let js_value = convert_value_to_js(env, value, safe_ints)?;
         arr.set(idx as u32, js_value)?;
     }
-    Ok(arr.coerce_to_object()?.into_unknown())
+    Ok(arr.to_unknown())
 }
 
 static LOGGER_INIT: OnceCell<()> = OnceCell::new();

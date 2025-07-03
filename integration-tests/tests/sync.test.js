@@ -242,7 +242,7 @@ test.serial("Statement.run() with array bind parameter", async (t) => {
   });
 });
 
-test.serial("Statement.run() with Float32Array bind parameter", async (t) => {
+test("Statement.run() with Float32Array bind parameter", async (t) => {
   const db = t.context.db;
 
   db.exec(`
