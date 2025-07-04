@@ -52,10 +52,7 @@ jobs:
           - host: ubuntu-24.04-arm
             target: armv7-unknown-linux-gnueabihf
             build: yarn build --target armv7-unknown-linux-gnueabihf --use-napi-cross
-          - host: ubuntu-24.04-arm
-            target: armv7-unknown-linux-musleabihf
-            build: yarn build --target armv7-unknown-linux-musleabihf -x
-    name: stable - ${{ matrix.settings.target }} - node@20
+    name: stable - ${{ matrix.settings.target }} - node@22
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v4
