@@ -298,7 +298,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@napi-rs/cli@npm:^3.0.0-alpha.91":
+"@napi-rs/cli@npm:3.0.0-alpha.91":
   version: 3.0.0-alpha.91
   resolution: "@napi-rs/cli@npm:3.0.0-alpha.91"
   dependencies:
@@ -328,6 +328,39 @@ __metadata:
     napi: ./dist/cli.js
     napi-raw: ./cli.mjs
   checksum: 10c0/a1e8078b47b64551f41d1386a7f462a9d34728bbe7158e9d55348889a6100d6c3c970fc7e1d7e4898fce362074515e283cd4475275eea88a1614cab66f16b12b
+  languageName: node
+  linkType: hard
+
+"@napi-rs/cli@patch:@napi-rs/cli@npm%3A3.0.0-alpha.91#~/.yarn/patches/@napi-rs-cli-npm-3.0.0-alpha.91-2cbd13e892.patch":
+  version: 3.0.0-alpha.91
+  resolution: "@napi-rs/cli@patch:@napi-rs/cli@npm%3A3.0.0-alpha.91#~/.yarn/patches/@napi-rs-cli-npm-3.0.0-alpha.91-2cbd13e892.patch::version=3.0.0-alpha.91&hash=acef45"
+  dependencies:
+    "@inquirer/prompts": "npm:^7.4.0"
+    "@napi-rs/cross-toolchain": "npm:^0.0.19"
+    "@napi-rs/wasm-tools": "npm:^0.0.3"
+    "@octokit/rest": "npm:^22.0.0"
+    clipanion: "npm:^4.0.0-rc.4"
+    colorette: "npm:^2.0.20"
+    debug: "npm:^4.4.0"
+    emnapi: "npm:^1.4.0"
+    find-up: "npm:^7.0.0"
+    js-yaml: "npm:^4.1.0"
+    lodash-es: "npm:^4.17.21"
+    semver: "npm:^7.7.1"
+    typanion: "npm:^3.14.0"
+    wasm-sjlj: "npm:^1.0.6"
+  peerDependencies:
+    "@emnapi/runtime": ^1.1.0
+    emnapi: ^1.1.0
+  peerDependenciesMeta:
+    "@emnapi/runtime":
+      optional: true
+    emnapi:
+      optional: true
+  bin:
+    napi: ./dist/cli.js
+    napi-raw: ./cli.mjs
+  checksum: 10c0/ca3da5e11ec9e74040cb0b7a03d5c10d58dd1b3d8d4309857ba94182b75a8002509afc477946ff739c5ff1943f12971eb5d7e821c8ca58d7e2ff784d40262b6a
   languageName: node
   linkType: hard
 
@@ -1944,7 +1977,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "libsql@workspace:."
   dependencies:
-    "@napi-rs/cli": "npm:^3.0.0-alpha.91"
+    "@napi-rs/cli": "patch:@napi-rs/cli@npm%3A3.0.0-alpha.91#~/.yarn/patches/@napi-rs-cli-npm-3.0.0-alpha.91-2cbd13e892.patch"
     ava: "npm:^6.0.1"
   languageName: unknown
   linkType: soft
