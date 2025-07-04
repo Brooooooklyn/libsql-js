@@ -1,0 +1,23 @@
+{
+  "name": "@libsql/linux-arm-gnueabihf",
+  "version": "0.6.0-pre.9",
+  "cpu": [
+    "arm"
+  ],
+  "main": "libsql.linux-arm-gnueabihf.node",
+  "files": [
+    "libsql.linux-arm-gnueabihf.node"
+  ],
+  "description": "A better-sqlite3 compatible API for libSQL that supports Bun, Deno, and Node",
+  "license": "MIT",
+  "engines": {
+    "node": ">= 10"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tursodatabase/libsql-js"
+  },
+  "os": [
+    "linux"
+  ]
+}

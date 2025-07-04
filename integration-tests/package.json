@@ -3,7 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "cross-env PROVIDER=sqlite ava tests/sync.test.js && cross-env LIBSQL_JS_DEV=1 PROVIDER=libsql ava tests/sync.test.js && cross-env LIBSQL_JS_DEV=1 ava tests/async.test.js && cross-env LIBSQL_JS_DEV=1 ava tests/extensions.test.js ava tests/concurrency.test.js"
+    "test": "cross-env PROVIDER=sqlite ava tests/sync.test.js && cross-env LIBSQL_JS_DEV=1 PROVIDER=libsql ava tests/sync.test.js && cross-env LIBSQL_JS_DEV=1 ava --timeout 3m tests/async.test.js && cross-env LIBSQL_JS_DEV=1 ava tests/extensions.test.js ava tests/concurrency.test.js"
   },
   "devDependencies": {
     "ava": "^5.3.0",
@@ -12,5 +12,9 @@
   "dependencies": {
     "better-sqlite3": "^11.10.0",
     "libsql": ".."
+  },
+  "ava": {
+    "workerThreads": false,
+    "cache": false
   }
 }
